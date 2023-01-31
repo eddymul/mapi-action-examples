@@ -6,6 +6,11 @@ from os.path import isfile
 app = FastAPI()
 con = sqlite3.connect(':memory:')
 
+import backtracepython as bt
+
+# Can be modified
+bt_attributes = {"environment": os.getenv("FASTAPI_ENV"), "serverId": "foo"}
+
 # In dev & testing only, include the stacktrace in the response on internal
 # server errors
 if os.getenv("FASTAPI_ENV") in ["dev", "test"]:
@@ -24,6 +29,14 @@ if os.getenv("FASTAPI_ENV") in ["dev", "test"]:
 
 @app.on_event("startup")
 async def startup_event():
+    bt.initialize(
+        endpoint="https://submit.backtrace.io/forallsecure/9257d693955bc94e704aeca5a3c697d6eaefc666c307e8998513848de6c0ca96/json",
+        token="9257d693955bc94e704aeca5a3c697d6eaefc666c307e8998513848de6c0ca96",
+        attributes=bt_attributes,
+        #debug_backtrace=True
+    )
+    bt.send_report("startup event")
+
     """Creates an in-memory database with a user table, and populate it with
     one account"""
     cur = con.cursor()
@@ -33,6 +46,7 @@ async def startup_event():
 
 @app.get("/")
 async def root():
+    bt.send_report("root event")
     return {"message": "Hello World"}
 
 @app.get("/login")
@@ -53,3 +67,15 @@ async def attachment(attachment_name: str):
 
     with open(attachment_path) as f:
         return f.readlines()
+
+@app.middleware("http")
+async def log_middle(request: Request, call_next):
+    for name, value in request.headers.items():
+        bt_attributes[name] = value
+
+    response = await call_next(request)
+
+    for name in request.headers.keys():
+        del bt_attributes[name]
+
+    return response
