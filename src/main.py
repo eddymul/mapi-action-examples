@@ -16,8 +16,11 @@ bt_attributes = {"environment": os.getenv("FASTAPI_ENV"), "serverId": "foo"}
 if os.getenv("FASTAPI_ENV") in ["dev", "test"]:
     @app.exception_handler(Exception)
     async def debug_exception_handler(request: Request, exc: Exception):
-        import traceback
+        report = bt.BacktraceReport()
+        report.set_exception(type(exc), exc, exc.__traceback__)
+        report.send()
 
+        import traceback
         return Response(
             status_code=500,
             content="".join(
