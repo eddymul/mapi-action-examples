@@ -8,9 +8,6 @@ con = sqlite3.connect(':memory:')
 
 import backtracepython as bt
 
-# Can be modified
-bt_attributes = {"environment": os.getenv("FASTAPI_ENV"), "serverId": "foo"}
-
 # In dev & testing only, include the stacktrace in the response on internal
 # server errors
 if os.getenv("FASTAPI_ENV") in ["dev", "test"]:
@@ -18,6 +15,8 @@ if os.getenv("FASTAPI_ENV") in ["dev", "test"]:
     async def debug_exception_handler(request: Request, exc: Exception):
         report = bt.BacktraceReport()
         report.set_exception(type(exc), exc, exc.__traceback__)
+        for name, value in request.headers.items():
+            report.set_attribute(name, value)
         report.send()
 
         import traceback
@@ -32,6 +31,7 @@ if os.getenv("FASTAPI_ENV") in ["dev", "test"]:
 
 @app.on_event("startup")
 async def startup_event():
+    bt_attributes = {"environment": os.getenv("FASTAPI_ENV"), "serverId": "foo"}
     bt.initialize(
         endpoint="https://submit.backtrace.io/forallsecure/9257d693955bc94e704aeca5a3c697d6eaefc666c307e8998513848de6c0ca96/json",
         token="9257d693955bc94e704aeca5a3c697d6eaefc666c307e8998513848de6c0ca96",
@@ -70,15 +70,3 @@ async def attachment(attachment_name: str):
 
     with open(attachment_path) as f:
         return f.readlines()
-
-@app.middleware("http")
-async def log_middle(request: Request, call_next):
-    for name, value in request.headers.items():
-        bt_attributes[name] = value
-
-    response = await call_next(request)
-
-    for name in request.headers.keys():
-        del bt_attributes[name]
-
-    return response
